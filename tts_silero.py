@@ -34,6 +34,7 @@ def _load_model():
     if _model is None:
         import torch
 
+        torch.set_num_threads(1)  # слабый облачный CPU/RAM: без перегрева и пиков
         _model, _ = torch.hub.load(
             "snakers4/silero-models",
             "silero_tts",

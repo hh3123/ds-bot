@@ -51,8 +51,11 @@ tree = app_commands.CommandTree(bot)
 
 # Привязка на сервер: guild_id -> channel_id, который озвучиваем.
 # Переживает перезапуски: один раз /setup — и навсегда, пока /leave.
-BINDINGS_FILE = Path(__file__).with_name("bindings.json")
-VOICES_FILE = Path(__file__).with_name("voices.json")
+import os
+
+DATA_DIR = Path(os.getenv("DATA_DIR", str(Path(__file__).parent)))
+BINDINGS_FILE = DATA_DIR / "bindings.json"
+VOICES_FILE = DATA_DIR / "voices.json"
 bound_channels: dict[int, dict] = load_bindings(BINDINGS_FILE)
 voice_overrides: dict[int, int] = load_overrides(VOICES_FILE)
 
@@ -119,6 +122,90 @@ async def on_ready() -> None:
         if isinstance(channel, discord.VoiceChannel) and any(not m.bot for m in channel.members):
             await channel.connect()
             log.info("Автовозврат в войс %s (%s)", channel.name, guild.name)
+
+    if os.getenv("COMMAND_QUEUE"):
+        asyncio.create_task(_modal_command_loop())
+        log.info("Команды слушаю из очереди Modal (режим спящего бота)")
+    if os.getenv("MODAL_WATCHDOG"):
+        asyncio.create_task(_watchdog())
+
+
+async def _modal_command_loop() -> None:
+    """Читает команды слэша, приехавшие через вебхук Modal."""
+    import modal as modal_lib
+
+    q = modal_lib.Queue.from_name(os.environ["COMMAND_QUEUE"], create_if_missing=True)
+    while True:
+        try:
+            cmd = await asyncio.to_thread(q.get, True, 30)
+        except Exception:
+            cmd = None
+        if not cmd:
+            continue
+        try:
+            await _dispatch_modal_command(cmd)
+        except Exception:
+            log.exception("Не исполнилось команда из очереди: %r", cmd)
+
+
+async def _dispatch_modal_command(cmd: dict) -> None:
+    guild = bot.get_guild(int(cmd["guild_id"]))
+    if guild is None:
+        return
+    channel = guild.get_channel(int(cmd["channel_id"]))
+    member = guild.get_member(int(cmd["user_id"]))
+    name = cmd["command"]
+
+    async def reply(text: str) -> None:
+        if isinstance(channel, discord.abc.Messageable):
+            await channel.send(text)
+
+    if name in ("setup", "join"):
+        if name == "setup" or guild.id not in bound_channels or not bound_channels[guild.id].get("text"):
+            binding = bound_channels.setdefault(guild.id, {"text": None, "voice": None})
+            binding["text"] = int(cmd["channel_id"])
+        voice_channel = member.voice.channel if member is not None and member.voice else None
+        if voice_channel is None:
+            await reply("Зайди в голосовой канал — и повтори команду.")
+            return
+        vc = guild.voice_client
+        if vc is not None:
+            await vc.move_to(voice_channel)
+        else:
+            await voice_channel.connect()
+        bound_channels[guild.id]["voice"] = voice_channel.id
+        _save_bindings()
+        await reply(f"Зашёл в **{voice_channel.name}**. Озвучиваю привязанный чат.")
+    elif name == "leave":
+        vc = guild.voice_client
+        bound_channels.pop(guild.id, None)
+        _save_bindings()
+        if vc is not None:
+            await vc.disconnect()
+        await reply("Вышел и снял привязку.")
+    elif name == "voice":
+        value = cmd.get("value")
+        if value is None:
+            return
+        chosen = VOICE_POOL[int(value)]
+        set_override(voice_overrides, int(cmd["user_id"]), chosen)
+        save_overrides(VOICES_FILE, voice_overrides)
+        await reply(f"{member.display_name if member else 'Ты'}: голос теперь **{chosen.label}**.")
+
+
+async def _watchdog() -> None:
+    """Modal-режим: войса нет 10 минут — умираем, контейнер гаснет, $0."""
+    await asyncio.sleep(120)
+    idle_since: float | None = None
+    while True:
+        await asyncio.sleep(60)
+        if not bot.voice_clients:
+            idle_since = idle_since or time.monotonic()
+            if time.monotonic() - idle_since > 600:
+                log.info("Войса нет 10 минут — ухожу спать (контейнер Modal гаснет)")
+                os._exit(0)
+        else:
+            idle_since = None
 
 
 @bot.event
