@@ -8,3 +8,4 @@ voices_custom/
 tmp_stream.mp3
 .pytest_cache/
 .env.local
+.env.*

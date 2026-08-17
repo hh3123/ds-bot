@@ -136,12 +136,21 @@ async def _modal_command_loop() -> None:
 
     q = modal_lib.Queue.from_name(os.environ["COMMAND_QUEUE"], create_if_missing=True)
     asyncio.create_task(_modal_heartbeat())
+    fails = 0
     while True:
         try:
             cmd = await asyncio.to_thread(q.get, True, 30)
-        except Exception:
-            cmd = None
+        except Exception as exc:  # каждые 30с таймаут очереди — норма, остальное — авария
+            if type(exc).__name__ != "Empty":
+                fails += 1
+                log.warning("Modal Queue сходит с ума (%d подряд): %r", fails, exc)
+                await asyncio.sleep(min(2 * fails, 30))
+            continue
+        fails = 0
         if not cmd:
+            continue
+        if time.time() - cmd.get("ts", time.time()) > 600:  # протухший призрак из очереди
+            log.info("Выкинул протухшую команду (%s) — старше 10 минут", cmd.get("command"))
             continue
         try:
             await _dispatch_modal_command(cmd)
@@ -155,6 +164,11 @@ async def _dispatch_modal_command(cmd: dict) -> None:
         return
     channel = guild.get_channel(int(cmd["channel_id"]))
     member = guild.get_member(int(cmd["user_id"]))
+    if member is None:
+        try:
+            member = await guild.fetch_member(int(cmd["user_id"]))
+        except discord.NotFound:
+            member = None
     name = cmd["command"]
 
     async def reply(text: str) -> None:
@@ -200,11 +214,17 @@ async def _modal_heartbeat() -> None:
     import modal as modal_lib
 
     status = modal_lib.Dict.from_name("ds-bot-state", create_if_missing=True)
+    fails = 0
     while True:
         try:
             status.put("runner-alive", time.time())
+            fails = 0
         except Exception:
-            log.warning("Не смог записать heartbeat в Modal Dict")
+            fails += 1
+            log.warning("Не смог записать heartbeat в Modal Dict (%d подряд)", fails)
+            if fails >= 5:
+                log.error("Heartbeat мёртв 5 минут — убиваюсь, чтоб не было дубля раннера")
+                os._exit(1)
         await asyncio.sleep(60)
 
 
@@ -217,7 +237,19 @@ async def _watchdog() -> None:
         if not bot.voice_clients:
             idle_since = idle_since or time.monotonic()
             if time.monotonic() - idle_since > 600:
+                await asyncio.sleep(10)
+                if bot.voice_clients:  # влетел джойн в последнюю секунду
+                    idle_since = None
+                    continue
                 log.info("Войса нет 10 минут — ухожу спать (контейнер Modal гаснет)")
+                try:
+                    import modal as modal_lib
+
+                    modal_lib.Dict.from_name("ds-bot-state", create_if_missing=True).put(
+                        "runner-alive", 0
+                    )
+                except Exception:
+                    pass
                 os._exit(0)
         else:
             idle_since = None

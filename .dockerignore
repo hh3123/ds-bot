@@ -2,6 +2,7 @@
 __pycache__
 *.pyc
 .env
+.env.*
 samples/
 voices_piper/
 voices_custom/

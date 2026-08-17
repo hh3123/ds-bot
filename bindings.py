@@ -36,7 +36,9 @@ def load_bindings(path: Path) -> dict[int, Binding]:
 
 
 def save_bindings(path: Path, bindings: dict[int, Binding]) -> None:
+    tmp = path.with_suffix(path.suffix + ".tmp")
     try:
-        path.write_text(json.dumps(bindings), encoding="utf-8")
+        tmp.write_text(json.dumps(bindings), encoding="utf-8")
+        tmp.replace(path)  # атомарно: либо старое целое, либо новое целое
     except OSError:
         log.exception("Не смог сохранить привязки в %s", path)

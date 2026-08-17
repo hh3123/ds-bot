@@ -50,7 +50,7 @@ _BOT_IMAGE = (
             "voices_custom/**",
             "**/__pycache__/**",
             ".pytest_cache/**",
-            "*.pyc",
+            "**/*.pyc",
         ],
     )
 )
@@ -77,7 +77,9 @@ volume = modal.Volume.from_name("ds-bot-data", create_if_missing=True)
 def bot_runner() -> None:
     import os
     import sys
+    import time
 
+    status.put("runner-alive", time.time())  # родился — сразу отмечаемся, до импорта бота
     sys.path.insert(0, "/root/app")
     os.chdir("/root/app")
     os.environ.setdefault("DATA_DIR", "/root/app/data")
@@ -105,8 +107,13 @@ async def interactions(request: fastapi.Request):
     from interactions_core import parse_interaction, parse_raw_body, verify_signature
 
     body = await request.body()
+    public_key = os.environ.get("DISCORD_PUBLIC_KEY")
+    if not public_key:
+        return fastapi.responses.JSONResponse(
+            content={"error": "server misconfigured: no public key"}, status_code=500
+        )
     if not verify_signature(
-        os.environ["DISCORD_PUBLIC_KEY"],
+        public_key,
         request.headers.get("x-signature-timestamp", ""),
         body,
         request.headers.get("x-signature-ed25519", ""),
@@ -115,7 +122,10 @@ async def interactions(request: fastapi.Request):
             content={"error": "invalid request signature"}, status_code=401
         )
 
-    payload = parse_raw_body(body)
+    try:
+        payload = parse_raw_body(body)
+    except ValueError:
+        return fastapi.responses.JSONResponse(content={"error": "bad body"}, status_code=400)
 
     if payload.get("type") == 1:  # пинг Discord при верификации URL
         return fastapi.responses.JSONResponse(content={"type": 1})
@@ -129,20 +139,26 @@ async def interactions(request: fastapi.Request):
     import time as _time
 
     ts = await status.get.aio("runner-alive", default=None)
-    alive = ts is not None and _time.time() - ts < 360
+    alive = ts is not None and _time.time() - ts < 180
+    command["ts"] = _time.time()
 
-    if command["command"] == "join":
-        await queue.put.aio(command)
-        if alive:
-            reply = "Секундочку, захожу."
+    try:
+        if command["command"] == "join":
+            await queue.put.aio(command, timeout=2)
+            if alive:
+                reply = "Секундочку, захожу."
+            else:
+                await status.put.aio("runner-alive", _time.time())
+                await bot_runner.spawn.aio()
+                reply = "Принято! Просыпаюсь — первый запуск займёт 2–3 минуты, потом зайду в войс."
         else:
-            await status.put.aio("runner-alive", _time.time())
-            await bot_runner.spawn.aio()
-            reply = "Принято! Просыпаюсь — первый запуск займёт 2–3 минуты, потом зайду в войс."
-    else:
-        if alive:
-            await queue.put.aio(command)
-            reply = "Ок."
-        else:
-            reply = "Сплю. Сначала /join — проснусь, тогда команды пойдут как обычно."
+            if alive:
+                await queue.put.aio(command, timeout=2)
+                reply = "Ок."
+            else:
+                reply = "Сплю. Сначала /join — проснусь, тогда команды пойдут как обычно."
+    except Exception:
+        return fastapi.responses.JSONResponse(
+            content={"error": "очередь облака не отвечает — попробуй через минуту"}, status_code=500
+        )
     return fastapi.responses.JSONResponse(content={"type": 4, "data": {"content": reply}})
