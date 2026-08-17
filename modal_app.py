@@ -77,9 +77,20 @@ volume = modal.Volume.from_name("ds-bot-data", create_if_missing=True)
 def bot_runner() -> None:
     import os
     import sys
+    import threading
     import time
 
     status.put("runner-alive", time.time())  # родился — сразу отмечаемся, до импорта бота
+
+    def _heartbeat_thread() -> None:  # бьётся независимо от asyncio — пока импорты/логин/торч
+        while True:
+            try:
+                status.put("runner-alive", time.time())
+            except Exception:
+                pass
+            time.sleep(30)
+
+    threading.Thread(target=_heartbeat_thread, daemon=True).start()
     sys.path.insert(0, "/root/app")
     os.chdir("/root/app")
     os.environ.setdefault("DATA_DIR", "/root/app/data")
@@ -139,7 +150,7 @@ async def interactions(request: fastapi.Request):
     import time as _time
 
     ts = await status.get.aio("runner-alive", default=None)
-    alive = ts is not None and _time.time() - ts < 180
+    alive = ts is not None and _time.time() - ts < 120
     command["ts"] = _time.time()
 
     try:
