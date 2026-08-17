@@ -170,6 +170,8 @@ async def _dispatch_modal_command(cmd: dict) -> None:
             await reply("Зайди в голосовой канал — и повтори команду.")
             return
         vc = guild.voice_client
+        if vc is not None and vc.channel == voice_channel:
+            return  # дубль /join из очереди — уже сидим там, молчим
         if vc is not None:
             await vc.move_to(voice_channel)
         else:
