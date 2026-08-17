@@ -1,0 +1,12 @@
+# torch ставится в Dockerfile отдельным шагом (CPU-сборка)
+discord.py[voice]>=2.4
+edge-tts>=6.1
+imageio-ffmpeg>=0.5
+python-dotenv>=1.0
+piper-tts>=1.2
+huggingface_hub>=0.24
+numpy>=1.26
+scipy>=1.11
+omegaconf>=2.3
+soundfile>=0.12
+num2words>=0.5

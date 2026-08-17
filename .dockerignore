@@ -1,0 +1,11 @@
+.venv
+__pycache__
+*.pyc
+.env
+samples/
+voices_piper/
+voices_custom/
+tests/
+.pytest_cache/
+start.bat
+tmp_stream.mp3
