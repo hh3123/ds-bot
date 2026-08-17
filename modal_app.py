@@ -15,6 +15,7 @@ app = modal.App("ds-bot")
 
 _BOT_IMAGE = (
     modal.Image.debian_slim(python_version="3.12")
+    .apt_install("libopus0")
     .pip_install("torch", index_url="https://download.pytorch.org/whl/cpu")
     .pip_install(
         "discord.py[voice]>=2.4",
