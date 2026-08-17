@@ -255,9 +255,10 @@ async def _watchdog() -> None:
                 for vc in bot.voice_clients
             )
 
+        idle_limit = int(os.getenv("WATCHDOG_IDLE_SEC", "600"))
         if not _has_humans():
             idle_since = idle_since or time.monotonic()
-            if time.monotonic() - idle_since > 600:
+            if time.monotonic() - idle_since > idle_limit:
                 await asyncio.sleep(10)
                 if _has_humans():  # влетел джойн в последнюю секунду
                     idle_since = None
