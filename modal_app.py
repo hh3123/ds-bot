@@ -89,7 +89,11 @@ def bot_runner() -> None:
     main()
 
 
-@app.function(image=_WEBHOOK_IMAGE, secrets=[modal.Secret.from_name("ds-bot-secrets")])
+@app.function(
+    image=_WEBHOOK_IMAGE,
+    secrets=[modal.Secret.from_name("ds-bot-secrets")],
+    min_containers=1,
+)
 @modal.fastapi_endpoint(method="POST")
 async def interactions(request: fastapi.Request):
     """Приёмник взаимодействий Discord: подпись, пинг, команды -> очередь."""
