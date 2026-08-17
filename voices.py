@@ -117,7 +117,9 @@ def load_overrides(path: Path) -> dict[int, object]:
 
 
 def save_overrides(path: Path, overrides: dict[int, object]) -> None:
+    tmp = path.with_suffix(path.suffix + ".tmp")
     try:
-        path.write_text(json.dumps(overrides), encoding="utf-8")
+        tmp.write_text(json.dumps(overrides), encoding="utf-8")
+        tmp.replace(path)  # атомарно: либо старое целое, либо новое целое
     except OSError:
         log.exception("Не смог сохранить голоса в %s", path)
