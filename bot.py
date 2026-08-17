@@ -135,6 +135,7 @@ async def _modal_command_loop() -> None:
     import modal as modal_lib
 
     q = modal_lib.Queue.from_name(os.environ["COMMAND_QUEUE"], create_if_missing=True)
+    asyncio.create_task(_modal_heartbeat())
     while True:
         try:
             cmd = await asyncio.to_thread(q.get, True, 30)
@@ -191,6 +192,19 @@ async def _dispatch_modal_command(cmd: dict) -> None:
         set_override(voice_overrides, int(cmd["user_id"]), chosen)
         save_overrides(VOICES_FILE, voice_overrides)
         await reply(f"{member.display_name if member else 'Ты'}: голос теперь **{chosen.label}**.")
+
+
+async def _modal_heartbeat() -> None:
+    """Держит флаг 'бот жив' в Modal Dict: вебхук не спавнит второй процесс."""
+    import modal as modal_lib
+
+    status = modal_lib.Dict.from_name("ds-bot-state", create_if_missing=True)
+    while True:
+        try:
+            status.put("runner-alive", True, ttl=180)
+        except Exception:
+            log.warning("Не смог записать heartbeat в Modal Dict")
+        await asyncio.sleep(60)
 
 
 async def _watchdog() -> None:

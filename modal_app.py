@@ -30,7 +30,24 @@ _BOT_IMAGE = (
         'python -c "import torch; torch.set_num_threads(2); '
         "torch.hub.load('snakers4/silero-models', 'silero_tts', language='ru', speaker='v5_1_ru', trust_repo=True)\""
     )
-    .add_local_dir(".", remote_path="/root/app")
+    .add_local_dir(
+        ".",
+        remote_path="/root/app",
+        ignore=[
+            ".venv/**",
+            ".git/**",
+            ".env",
+            ".env.*",
+            "bindings.json",
+            "voices.json",
+            "samples/**",
+            "voices_piper/**",
+            "voices_custom/**",
+            "**/__pycache__/**",
+            ".pytest_cache/**",
+            "*.pyc",
+        ],
+    )
 )
 
 _WEBHOOK_IMAGE = (
@@ -40,6 +57,7 @@ _WEBHOOK_IMAGE = (
 )
 
 queue = modal.Queue.from_name("ds-bot-commands", create_if_missing=True)
+status = modal.Dict.from_name("ds-bot-state", create_if_missing=True)
 volume = modal.Volume.from_name("ds-bot-data", create_if_missing=True)
 
 
@@ -102,8 +120,12 @@ async def interactions(request):  # fastapi.Request
     queue.put(command)
 
     if command["command"] == "join":
-        bot_runner.spawn()
-        reply = "Принято! Просыпаюсь — первый запуск займёт 2–3 минуты, потом зайду в войс."
+        if status.contains("runner-alive"):
+            reply = "Я уже жив (или дозапускаюсь) — сделай /join ещё раз через пару минут, если не зайду."
+        else:
+            status.put("runner-alive", True, ttl=180)
+            bot_runner.spawn()
+            reply = "Принято! Просыпаюсь — первый запуск займёт 2–3 минуты, потом зайду в войс."
     else:
         reply = "Принято!"
     return fastapi.responses.JSONResponse(content={"type": 4, "data": {"content": reply}})
