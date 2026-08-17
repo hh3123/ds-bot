@@ -185,7 +185,6 @@ async def _dispatch_modal_command(cmd: dict) -> None:
         _save_bindings()
         if vc is not None:
             await vc.disconnect()
-        await reply("Вышел и снял привязку.")
     elif name == "voice":
         value = cmd.get("value")
         if value is None:

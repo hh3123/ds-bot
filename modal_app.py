@@ -134,7 +134,7 @@ async def interactions(request: fastapi.Request):
     if command["command"] == "join":
         await queue.put.aio(command)
         if alive:
-            reply = "Я уже жив (или дозапускаюсь) — сделай /join ещё раз через пару минут, если не зайду."
+            reply = "Секундочку, захожу."
         else:
             await status.put.aio("runner-alive", _time.time())
             await bot_runner.spawn.aio()
@@ -142,7 +142,7 @@ async def interactions(request: fastapi.Request):
     else:
         if alive:
             await queue.put.aio(command)
-            reply = "Принято!"
+            reply = "Ок."
         else:
             reply = "Сплю. Сначала /join — проснусь, тогда команды пойдут как обычно."
     return fastapi.responses.JSONResponse(content={"type": 4, "data": {"content": reply}})
