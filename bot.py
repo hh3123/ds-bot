@@ -108,7 +108,7 @@ async def on_ready() -> None:
     if TTS_ENGINE == "silero":
         import tts_silero
 
-        asyncio.create_task(tts_silero.preload())  # прогрев модели фоном
+        _spawn(tts_silero.preload())  # прогрев модели фоном
 
     # Автовозврат в последний войс после перезапуска, если там живые люди
     for guild in bot.guilds:
@@ -124,10 +124,21 @@ async def on_ready() -> None:
             log.info("Автовозврат в войс %s (%s)", channel.name, guild.name)
 
     if os.getenv("COMMAND_QUEUE"):
-        asyncio.create_task(_modal_command_loop())
+        _spawn(_modal_command_loop())
         log.info("Команды слушаю из очереди Modal (режим спящего бота)")
     if os.getenv("MODAL_WATCHDOG"):
-        asyncio.create_task(_watchdog())
+        _spawn(_watchdog())
+
+
+_BG_TASKS: set[asyncio.Task] = set()
+
+
+def _spawn(coro) -> asyncio.Task:
+    """create_task с сильной ссылкой: иначе GC забирает задачу и она молча исчезает."""
+    task = asyncio.create_task(coro)
+    _BG_TASKS.add(task)
+    task.add_done_callback(_BG_TASKS.discard)
+    return task
 
 
 async def _modal_command_loop() -> None:
@@ -135,7 +146,7 @@ async def _modal_command_loop() -> None:
     import modal as modal_lib
 
     q = modal_lib.Queue.from_name(os.environ["COMMAND_QUEUE"], create_if_missing=True)
-    asyncio.create_task(_modal_heartbeat())
+    _spawn(_modal_heartbeat())
     fails = 0
     while True:
         try:
