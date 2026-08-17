@@ -201,7 +201,7 @@ async def _modal_heartbeat() -> None:
     status = modal_lib.Dict.from_name("ds-bot-state", create_if_missing=True)
     while True:
         try:
-            status.put("runner-alive", True, ttl=180)
+            status.put("runner-alive", time.time())
         except Exception:
             log.warning("Не смог записать heartbeat в Modal Dict")
         await asyncio.sleep(60)

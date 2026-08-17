@@ -120,10 +120,14 @@ async def interactions(request):  # fastapi.Request
     queue.put(command)
 
     if command["command"] == "join":
-        if status.contains("runner-alive"):
+        import time as _time
+
+        ts = status.get("runner-alive", default=None)
+        alive = ts is not None and _time.time() - ts < 180
+        if alive:
             reply = "Я уже жив (или дозапускаюсь) — сделай /join ещё раз через пару минут, если не зайду."
         else:
-            status.put("runner-alive", True, ttl=180)
+            status.put("runner-alive", _time.time())
             bot_runner.spawn()
             reply = "Принято! Просыпаюсь — первый запуск займёт 2–3 минуты, потом зайду в войс."
     else:
