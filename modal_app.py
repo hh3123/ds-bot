@@ -28,6 +28,7 @@ _BOT_IMAGE = (
         "soundfile>=0.12",
         "num2words>=0.5",
         "piper-tts>=1.2",
+        "emoji>=2.12",
         "fastapi",
     )
     .run_commands(
