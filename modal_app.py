@@ -117,13 +117,13 @@ async def interactions(request):  # fastapi.Request
             content={"error": "unsupported interaction type"}, status_code=400
         )
 
-    queue.put(command)
+    import time as _time
+
+    ts = status.get("runner-alive", default=None)
+    alive = ts is not None and _time.time() - ts < 360
 
     if command["command"] == "join":
-        import time as _time
-
-        ts = status.get("runner-alive", default=None)
-        alive = ts is not None and _time.time() - ts < 180
+        queue.put(command)
         if alive:
             reply = "Я уже жив (или дозапускаюсь) — сделай /join ещё раз через пару минут, если не зайду."
         else:
@@ -131,5 +131,9 @@ async def interactions(request):  # fastapi.Request
             bot_runner.spawn()
             reply = "Принято! Просыпаюсь — первый запуск займёт 2–3 минуты, потом зайду в войс."
     else:
-        reply = "Принято!"
+        if alive:
+            queue.put(command)
+            reply = "Принято!"
+        else:
+            reply = "Сплю. Сначала /join — проснусь, тогда команды пойдут как обычно."
     return fastapi.responses.JSONResponse(content={"type": 4, "data": {"content": reply}})
