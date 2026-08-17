@@ -8,6 +8,7 @@
 Персистентные привязки (bindings/voices) — на Modal Volume.
 """
 
+import fastapi
 import modal
 
 app = modal.App("ds-bot")
@@ -25,6 +26,7 @@ _BOT_IMAGE = (
         "omegaconf>=2.3",
         "soundfile>=0.12",
         "num2words>=0.5",
+        "fastapi",
     )
     .run_commands(
         'python -c "import torch; torch.set_num_threads(2); '
@@ -87,11 +89,9 @@ def bot_runner() -> None:
 
 @app.function(image=_WEBHOOK_IMAGE, secrets=[modal.Secret.from_name("ds-bot-secrets")])
 @modal.fastapi_endpoint(method="POST")
-async def interactions(request):  # fastapi.Request
+async def interactions(request: fastapi.Request):
     """Приёмник взаимодействий Discord: подпись, пинг, команды -> очередь."""
     import os
-
-    import fastapi
 
     from interactions_core import parse_interaction, parse_raw_body, verify_signature
 
