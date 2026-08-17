@@ -26,6 +26,7 @@ _BOT_IMAGE = (
         "omegaconf>=2.3",
         "soundfile>=0.12",
         "num2words>=0.5",
+        "piper-tts>=1.2",
         "fastapi",
     )
     .run_commands(
@@ -119,20 +120,20 @@ async def interactions(request: fastapi.Request):
 
     import time as _time
 
-    ts = status.get("runner-alive", default=None)
+    ts = await status.get.aio("runner-alive", default=None)
     alive = ts is not None and _time.time() - ts < 360
 
     if command["command"] == "join":
-        queue.put(command)
+        await queue.put.aio(command)
         if alive:
             reply = "Я уже жив (или дозапускаюсь) — сделай /join ещё раз через пару минут, если не зайду."
         else:
-            status.put("runner-alive", _time.time())
-            bot_runner.spawn()
+            await status.put.aio("runner-alive", _time.time())
+            await bot_runner.spawn.aio()
             reply = "Принято! Просыпаюсь — первый запуск займёт 2–3 минуты, потом зайду в войс."
     else:
         if alive:
-            queue.put(command)
+            await queue.put.aio(command)
             reply = "Принято!"
         else:
             reply = "Сплю. Сначала /join — проснусь, тогда команды пойдут как обычно."
