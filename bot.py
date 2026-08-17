@@ -252,14 +252,7 @@ async def _watchdog() -> None:
                     idle_since = None
                     continue
                 log.info("Живых в войсе нет 10 минут — ухожу спать (контейнер Modal гаснет)")
-                try:
-                    await asyncio.to_thread(
-                        modal_lib.Dict.from_name("ds-bot-state", create_if_missing=True).put,
-                        "runner-alive",
-                        0,
-                    )
-                except Exception:
-                    pass
+                # флаг не чистим руками: умрёт сам вместе с процессом (поток heartbeat заглохнет ≤30с)
                 os._exit(0)
         else:
             idle_since = None
