@@ -94,6 +94,8 @@ def bot_runner() -> None:
     image=_WEBHOOK_IMAGE,
     secrets=[modal.Secret.from_name("ds-bot-secrets")],
     min_containers=1,
+    cpu=0.125,
+    memory=512,
 )
 @modal.fastapi_endpoint(method="POST")
 async def interactions(request: fastapi.Request):
