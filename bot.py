@@ -230,23 +230,33 @@ async def _modal_heartbeat() -> None:
 
 async def _watchdog() -> None:
     """Modal-режим: войса нет 10 минут — умираем, контейнер гаснет, $0."""
+    import modal as modal_lib
+
     await asyncio.sleep(120)
     idle_since: float | None = None
     while True:
         await asyncio.sleep(60)
-        if not bot.voice_clients:
+
+        def _has_humans() -> bool:  # живой человек рядом с ботом в войсе?
+            return any(
+                vc.channel is not None
+                and any(not m.bot for m in vc.channel.members)
+                for vc in bot.voice_clients
+            )
+
+        if not _has_humans():
             idle_since = idle_since or time.monotonic()
             if time.monotonic() - idle_since > 600:
                 await asyncio.sleep(10)
-                if bot.voice_clients:  # влетел джойн в последнюю секунду
+                if _has_humans():  # влетел джойн в последнюю секунду
                     idle_since = None
                     continue
-                log.info("Войса нет 10 минут — ухожу спать (контейнер Modal гаснет)")
+                log.info("Живых в войсе нет 10 минут — ухожу спать (контейнер Modal гаснет)")
                 try:
-                    import modal as modal_lib
-
-                    modal_lib.Dict.from_name("ds-bot-state", create_if_missing=True).put(
-                        "runner-alive", 0
+                    await asyncio.to_thread(
+                        modal_lib.Dict.from_name("ds-bot-state", create_if_missing=True).put,
+                        "runner-alive",
+                        0,
                     )
                 except Exception:
                     pass
