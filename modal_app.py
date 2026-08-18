@@ -97,7 +97,6 @@ def bot_runner() -> None:
     os.environ.setdefault("TTS_ENGINE", "silero")
     os.environ.setdefault("COMMAND_QUEUE", "ds-bot-commands")
     os.environ.setdefault("MODAL_WATCHDOG", "1")
-    os.environ.setdefault("WATCHDOG_IDLE_SEC", "30")  # ТЕСТ: мгновенная проверка суицида; вернуть 600 после контроля
 
     from bot import main
 
