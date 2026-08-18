@@ -250,7 +250,7 @@ async def _watchdog() -> None:
     считает упавшим и перезапускает инпут бесконечно (deployed app) — раннер
     реинкарнирует за секунды, и «самоубийство» превращается в вечный круг.
     """
-    await asyncio.sleep(120)
+    await asyncio.sleep(int(os.getenv("WATCHDOG_GRACE_SEC", "120")))  # грейс на бут: не самоубиваться, пока все заходят
     idle_since: float | None = None
     while True:
         await asyncio.sleep(60)
