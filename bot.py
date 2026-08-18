@@ -110,7 +110,17 @@ async def on_ready() -> None:
 
         _spawn(tts_silero.preload())  # прогрев модели фоном
 
-    # Автовозврат в последний войс после перезапуска, если там живые люди
+    # Фоновые службы — ДО автовозврата: отвал голосового коннекта не должен
+    # уносить с собой consumer очереди и watchdog (был зомби-раннер без смерти).
+    if os.getenv("COMMAND_QUEUE") and not any(t.get_name() == "consumer" and not t.done() for t in _BG_TASKS):
+        _spawn(_modal_command_loop()).set_name("consumer")
+        log.info("Команды слушаю из очереди Modal (режим спящего бота)")
+    if os.getenv("MODAL_WATCHDOG") and not any(t.get_name() == "watchdog" and not t.done() for t in _BG_TASKS):
+        _spawn(_watchdog()).set_name("watchdog")
+
+    # Автовозврат в последний войс после перезапуска, если там живые люди.
+    # Коннект по каждому гильду изолирован: один медленный voice-хендшейк
+    # (TimeoutError на слабом роуте до Discord) не рушит остальную инициализацию.
     for guild in bot.guilds:
         binding = bound_channels.get(guild.id)
         if binding is None or guild.voice_client is not None:
@@ -120,14 +130,11 @@ async def on_ready() -> None:
             continue
         channel = guild.get_channel(voice_id)
         if isinstance(channel, discord.VoiceChannel) and any(not m.bot for m in channel.members):
-            await channel.connect()
-            log.info("Автовозврат в войс %s (%s)", channel.name, guild.name)
-
-    if os.getenv("COMMAND_QUEUE"):
-        _spawn(_modal_command_loop())
-        log.info("Команды слушаю из очереди Modal (режим спящего бота)")
-    if os.getenv("MODAL_WATCHDOG"):
-        _spawn(_watchdog())
+            try:
+                await channel.connect()
+                log.info("Автовозврат в войс %s (%s)", channel.name, guild.name)
+            except Exception:
+                log.exception("Автовозврат в войс %s не сложился — жду /join из очереди", channel.name)
 
 
 _BG_TASKS: set[asyncio.Task] = set()
@@ -197,10 +204,15 @@ async def _dispatch_modal_command(cmd: dict) -> None:
         vc = guild.voice_client
         if vc is not None and vc.channel == voice_channel:
             return  # дубль /join из очереди — уже сидим там, молчим
-        if vc is not None:
-            await vc.move_to(voice_channel)
-        else:
-            await voice_channel.connect()
+        try:
+            if vc is not None:
+                await vc.move_to(voice_channel)
+            else:
+                await voice_channel.connect()
+        except Exception:
+            log.exception("Не смог войти в войс %s — handshake Discord", voice_channel.name)
+            await reply(f"Не смог зайти в **{voice_channel.name}** — голосовой сервер Discord тормозит. Жми `/join` ещё раз через полминуты.")
+            return
         bound_channels[guild.id]["voice"] = voice_channel.id
         _save_bindings()
         await reply(f"Зашёл в **{voice_channel.name}**. Озвучиваю привязанный чат.")
