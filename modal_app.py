@@ -160,7 +160,12 @@ async def interactions(request: fastapi.Request):
                 reply = "Секундочку, захожу."
             else:
                 await status.put.aio("runner-alive", _time.time())
-                await bot_runner.spawn.aio()
+                try:
+                    await bot_runner.spawn.aio()
+                except Exception:
+                    # спавн не принят — флаг не должен врать «просыпаюсь» ещё 120с
+                    await status.put.aio("runner-alive", 0)
+                    raise
                 reply = "Принято! Просыпаюсь — первый запуск займёт 2–3 минуты, потом зайду в войс."
         else:
             if alive:

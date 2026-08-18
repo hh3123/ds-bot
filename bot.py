@@ -234,15 +234,22 @@ async def _modal_heartbeat() -> None:
             fails += 1
             log.warning("Не смог записать heartbeat в Modal Dict (%d подряд)", fails)
             if fails >= 5:
-                log.error("Heartbeat мёртв 5 минут — убиваюсь, чтоб не было дубля раннера")
-                os._exit(1)
+                # НЕ os._exit: для Modal выход посреди spawned-вызова == крэш контейнера,
+                # а deployed-аппу Modal перезапускает бесконечно (зомби-реинкарнация).
+                log.error("Heartbeat мёртв 5 минут — ухожу, чтоб не было дубля раннера")
+                await bot.close()
+                return
         await asyncio.sleep(60)
 
 
 async def _watchdog() -> None:
-    """Modal-режим: войса нет 10 минут — умираем, контейнер гаснет, $0."""
-    import modal as modal_lib
+    """Modal-режим: войса нет 10 минут — умираем, контейнер гаснет, $0.
 
+    Смерть = НОРМАЛЬНЫЙ возврат из bot_runner (bot.close → bot.run отпускает).
+    os._exit тут ЗАПРЕЩЁН: контейнер, сдохший посреди spawned-вызова, Modal
+    считает упавшим и перезапускает инпут бесконечно (deployed app) — раннер
+    реинкарнирует за секунды, и «самоубийство» превращается в вечный круг.
+    """
     await asyncio.sleep(120)
     idle_since: float | None = None
     while True:
@@ -263,9 +270,11 @@ async def _watchdog() -> None:
                 if _has_humans():  # влетел джойн в последнюю секунду
                     idle_since = None
                     continue
-                log.info("Живых в войсе нет 10 минут — ухожу спать (контейнер Modal гаснет)")
-                # флаг не чистим руками: умрёт сам вместе с процессом (поток heartbeat заглохнет ≤30с)
-                os._exit(0)
+                log.info("Живых в войсе нет %s сек — ухожу спать (раннер завершается, $0)", idle_limit)
+                # close() → bot.run() возвращается → main() возвращается → инпут завершён
+                # успехом, контейнер гаснет, флаг runner-alive замерзает ≤30с (поток умрёт).
+                await bot.close()
+                return
         else:
             idle_since = None
 
