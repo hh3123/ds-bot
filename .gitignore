@@ -7,5 +7,6 @@ voices_piper/
 voices_custom/
 tmp_stream.mp3
 .pytest_cache/
+omp-session-*.html
 .env.local
 .env.*
